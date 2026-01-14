@@ -11,6 +11,15 @@ export type TestHint = {
   suggestion: string;
 };
 
+export type RefactorStep = {
+  title: string;
+  impact: "low" | "medium" | "high";
+  files?: string[];
+  rationale: string;
+  steps: string[];
+  relatedIssueIds: string[];
+};
+
 export type Issue = {
   id: string;
   severity: "low" | "medium" | "high";
@@ -39,6 +48,7 @@ export type Report = {
     byExt: Record<string, number>;
     largestFiles: FileInfo[];
   };
+  refactorPlan?: RefactorStep[];
   testHints?: TestHint[];
   issues: Issue[];
 };

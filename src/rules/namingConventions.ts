@@ -4,11 +4,38 @@ import { classifyFile } from "@/core/classify";
 function hasPascalCase(name: string) {
   return /^[A-Z][A-Za-z0-9]*$/.test(name);
 }
+
 function hasKebabCase(name: string) {
   return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name);
 }
+
 function hasCamelOrLower(name: string) {
   return /^[a-z][A-Za-z0-9]*$/.test(name);
+}
+
+function camelToKebab(input: string) {
+  return input
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/_/g, "-")
+    .toLowerCase();
+}
+
+function isDotSuffixValid(base: string, kind: "service" | "api" | "util") {
+  // permite: user.service, user.utils, auth.api, etc.
+  const parts = base.split(".");
+  if (parts.length !== 2) return false;
+
+  const [name, suffix] = parts;
+  if (!name || !suffix) return false;
+
+  // nombre: kebab-case
+  if (!hasKebabCase(name)) return false;
+
+  if (kind === "service") return suffix === "service";
+  if (kind === "api") return suffix === "api";
+  if (kind === "util") return suffix === "util" || suffix === "utils";
+
+  return false;
 }
 
 export function ruleNamingConventions(files: string[]): Issue[] {
@@ -23,6 +50,7 @@ export function ruleNamingConventions(files: string[]): Issue[] {
 
     const kind = classifyFile(norm);
 
+    // Components: PascalCase.tsx (solo cuando el archivo se clasifica como component)
     if (ext === "tsx" && kind === "component") {
       if (!hasPascalCase(base)) {
         issues.push({
@@ -36,6 +64,7 @@ export function ruleNamingConventions(files: string[]): Issue[] {
       }
     }
 
+    // Hooks: useXxx.ts
     if (kind === "hook") {
       if (!/^use[A-Z]/.test(base)) {
         issues.push({
@@ -49,46 +78,42 @@ export function ruleNamingConventions(files: string[]): Issue[] {
       }
     }
 
-    function isDotSuffixValid(base: string, kind: "service" | "api" | "util") {
-      // permite: user.service, user.utils, auth.api, etc.
-      const parts = base.split(".");
-      if (parts.length !== 2) return false;
-
-      const [name, suffix] = parts;
-      if (!name || !suffix) return false;
-
-      // nombre: kebab-case
-      if (!hasKebabCase(name)) return false;
-
-      if (kind === "service") return suffix === "service";
-      if (kind === "api") return suffix === "api";
-      if (kind === "util") return suffix === "util" || suffix === "utils";
-
-      return false;
-    }
-
+    // Services / API / Utils:
+    // - services: <kebab>.service.ts
+    // - api:      <kebab>.api.ts
+    // - utils:    kebab-case.ts  OR  <kebab>.utils.ts / <kebab>.util.ts
     if (kind === "service" || kind === "api" || kind === "util") {
-      const k = kind; // para TS narrow
-      const ok = isDotSuffixValid(base, k) || hasKebabCase(base); // opcional: permitir utilidades sin sufijo (ej: format-date.ts)
+      const k = kind;
+
+      const ok =
+        isDotSuffixValid(base, k) ||
+        hasKebabCase(base) || // ej: format-horario-sku.ts
+        (k === "util" && (base.endsWith(".util") || base.endsWith(".utils"))); // explícito
 
       if (!ok) {
+        // sugerencia de rename: solo para nombres sin sufijo (no intentamos adivinar el sufijo)
+        const suggestedBase = base.includes(".") ? base : camelToKebab(base);
+        const suggestedFile = norm.replace(fileName, `${suggestedBase}.${ext}`);
+
         issues.push({
           id: "NAMING-MOD-001",
           severity: "low",
           title: "Módulo (service/api/util) con nombre fuera de convención",
           explanation:
-            "Convención: <kebab-name>.(service|api|util|utils).ts (ej: voucher.service.ts, user.utils.ts). Alternativamente kebab-case sin sufijo para helpers generales.",
+            "Convención: utils en kebab-case (format-horario-sku.ts) o <kebab>.utils.ts. Services: <kebab>.service.ts. APIs: <kebab>.api.ts.",
           evidence: {
             file: norm,
-            expected: "<name>.(service|api|util|utils).ts",
+            expected: "utils: kebab-case.ts | <kebab>.utils.ts",
+            renameSuggestion: suggestedFile,
           },
         });
       }
     }
 
-    // Carpetas: kebab-case (o lowerCamel). Esto reduce mezcla de estilos.
+    // Carpetas: kebab-case o lowerCamel
     for (const dir of parts.slice(0, -1)) {
       if (dir === "" || dir.startsWith(".") || dir === "src") continue;
+
       if (!hasKebabCase(dir) && !hasCamelOrLower(dir)) {
         issues.push({
           id: "NAMING-DIR-001",

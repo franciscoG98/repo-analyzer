@@ -9,6 +9,10 @@ import { ruleNamingConventions } from "@/rules/namingConventions";
 import { ruleLayering } from "@/rules/layering";
 import { ruleSmartDumb } from "@/rules/smartDumb";
 import { buildTestHints } from "@/report/testHints";
+import { ruleApiSurface } from "@/rules/apiSurface";
+import { ruleServiceHttpConsistency } from "@/rules/serviceHttpConsistency";
+import { ruleDuplicateEndpoints } from "@/rules/duplicateEndpoints";
+import { buildRefactorPlan } from "@/report/refactorPlan";
 
 async function main() {
   const repoRoot = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
@@ -30,15 +34,20 @@ async function main() {
     ...ruleNamingConventions(files),
     ...ruleLayering(repoRoot, files),
     ...ruleSmartDumb(repoRoot, files),
+    ...ruleApiSurface(repoRoot, files),
+    ...ruleServiceHttpConsistency(repoRoot, files),
+    ...ruleDuplicateEndpoints(repoRoot, files),
   ];
 
   const testHints = buildTestHints(issues);
+  const refactorPlan = buildRefactorPlan(issues);
 
   const report: Report = {
     meta: { generatedAt: new Date().toISOString(), repoRoot },
     project,
     inventory: { totalFiles: files.length, byExt, largestFiles },
     testHints,
+    refactorPlan,
     issues,
   };
 
