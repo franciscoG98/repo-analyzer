@@ -1,153 +1,264 @@
-# Repo Analyzer (Node.js) — Documentación
+# Repo Analyzer (Node.js) 
 
-Herramienta CLI en Node.js para analizar repositorios (en especial proyectos Next.js/React/TypeScript) y generar un reporte estructurado con señales de calidad, inconsistencias, malas prácticas y oportunidades de refactor. El objetivo es producir un **contexto técnico accionable** que sirva tanto para humanos como para alimentar otra IA (por ejemplo, para sugerir refactors, estandarizar convenciones y planificar tests).
+Herramienta CLI en Node.js para analizar repositorios de código (con foco inicial en Next.js / React / TypeScript) y generar un reporte estructurado con:
+
+- contexto funcional de la aplicación,
+- señales de arquitectura,
+- inconsistencias de naming y capas,
+- riesgos de mantenimiento,
+- planes de refactor priorizados,
+- y sugerencias de tests.
+
+El output está diseñado para ser legible por humanos y consumible por otras IAs como contexto confiable.
 
 ---
 
 ## Objetivo
 
-- Detectar temprano problemas típicos de mantenibilidad: duplicación, convenciones inconsistentes, acoplamientos entre capas y “surfaces” de API fragmentadas.
-- Generar un reporte que ayude a:
-  - Comprender el proyecto rápidamente.
-  - Priorizar refactors con impacto.
-  - Estabilizar contratos (API client/services) para evitar divergencias.
-  - Identificar dónde conviene agregar tests (unit/integration/contract).
+Reducir la entropía en repositorios reales (legacy o en crecimiento) mediante análisis automático que permita:
 
----
+- entender qué hace la app y qué no hace,
+- detectar problemas estructurales antes de que escalen,
+- priorizar refactors de alto impacto,
+- estandarizar convenciones (naming, capas, HTTP),
+- guiar la incorporación progresiva de tests.
 
-## En qué se basa
+No intenta “arreglar” el código automáticamente: explica el sistema y señala dónde intervenir.
 
-El analyzer aplica un enfoque incremental:
 
-1. **Discovery**
-   - Detecta señales del stack (Next.js, TypeScript, ESLint, Prettier, scripts y dependencias).
-2. **Indexación**
-   - Recorre el repositorio respetando `.gitignore` y excludes comunes (`node_modules`, `.next`, etc.).
-   - Genera inventario de archivos (extensiones, tamaño, top archivos más grandes).
-3. **Reglas (rules engine)**
-   - Ejecuta reglas heurísticas que generan `issues` con evidencia concreta.
-   - Cada regla está aislada en un archivo: una responsabilidad, fácil de extender.
-4. **Síntesis**
-   - Produce un `out/report.json` con estructura estable para automatización/IA.
+### En qué se basa
 
----
+El analyzer sigue un enfoque incremental y pragmático:
 
-## Qué cubre hoy (MVP actual)
+1. Discovery
+    - Detecta stack, tooling y scripts (Next, TS, ESLint, Prettier, etc.).
+2. Indexación
+    - Recorre el repo respetando .gitignore y excludes estándar.
+    - Genera inventario de archivos y hotspots.
+3. Clasificación
+    - Clasifica archivos por rol: service, api, util, hook, component, context, etc.
+    - Permite aplicar reglas específicas por capa.
+4. Rules Engine
+    - Cada regla es independiente y genera issues con:
+      - id
+      - severity
+      - explicación
+      - evidencia concreta (archivos, imports, endpoints, sugerencias).
+5.Síntesis
+    - Construye un report.json estable que incluye:
+      - contexto de la app,
+      - issues,
+      - plan de refactor,
+      - sugerencias de tests.
 
-### 1) Inventario del repo
+### Qué cubre hoy (estado actual)
+
+### 1) Contexto funcional de la aplicación (appContext)
+
+El analyzer infiere qué hace la app a partir de:
+
+- endpoints consumidos,
+- services existentes,
+- rutas UI,
+- dominios nombrados.
+
+Ejemplo real generado:
+
+```
+"summary": {
+  "whatItDoes": [
+    "Gestiona vouchers",
+    "Gestiona reservas",
+    "Consulta excursiones",
+    "Consulta alojamientos"
+  ],
+  "whatItDoesNotDo": [
+    "No se detecta integración explícita con pasarelas de pago"
+  ]
+}
+```
+
+Esto permite usar el reporte como contexto de entrada para una IA sin explicarle el proyecto manualmente.
+
+### 2) Inventario del repositorio
+
 - Total de archivos analizados.
-- Conteo por extensión (`.ts`, `.tsx`, etc.).
-- Top archivos más grandes (para detectar hotspots).
+- Conteo por extensión.
+- Top archivos más grandes (hotspots reales).
 
-### 2) Detección de configuración (config signals)
-- Next.js / TS / ESLint / Prettier detectados.
-- Scripts relevantes (`lint`, `format`, etc.).
-- Issues si faltan componentes base (por ejemplo ESLint/Prettier ausentes).
+### 3) Señales de configuración
 
-### 3) Conflictos de configuración en raíz
-- ESLint: `eslint.config.*` vs `.eslintrc*`
-- Prettier: múltiples configs simultáneos
-- Next: múltiples `next.config.*`
-- Lockfiles múltiples (`package-lock`, `yarn.lock`, `pnpm-lock.yaml`)
+- Next.js / TypeScript / ESLint / Prettier detectados.
+- Scripts disponibles (lint, format, etc.).
+- Issues si faltan piezas básicas.
 
-### 4) Convenciones de nombres (naming conventions)
-Con convención elegida:
-- **Services**: `<kebab>.service.ts` (ej: `voucher.service.ts`)
-- **API**: `<kebab>.api.ts`
-- **Utils**: `kebab-case.ts` o `<kebab>.utils.ts`
-- **Hooks**: `useXxx.ts`
-- **Components**: `PascalCase.tsx` (cuando se clasifica como component)
+### 4) Conflictos de configuración
 
-El reporte incluye `renameSuggestion` para renombres mecánicos (camelCase → kebab-case).
+Detecta problemas clásicos en raíz:
 
-### 5) Consistencia HTTP en services (dolor principal)
-Detecta:
-- Muchos services haciendo HTTP directo (fetch/axios/ky/graphql-request), señal de divergencia futura.
-- Dispersión de env vars/URLs (si aplica).
+ESLint: eslint.config.* vs .eslintrc*
 
----
+Prettier: múltiples configs activos
 
-## Qué NO cubre todavía (roadmap inmediato)
+Next: múltiples next.config.*
 
-- Duplicación de endpoints (`/api/...`) entre services (para señalar funciones duplicadas).
-- Refactor plan automático (sección `refactorPlan` en el reporte).
-- Sugerencias de tests (`testHints`) más completas.
-- Análisis semántico profundo vía AST (para detectar duplicación semántica, complejidad real, graph imports, etc.).
-- Auto-fix (renombrar archivos y actualizar imports).
+Lockfiles múltiples (npm / yarn / pnpm)
 
----
+### 5) Convenciones de naming
 
-## Cómo se usa
+Convenciones aplicadas (opinadas y explícitas):
+
+- **Services**: <kebab>.service.ts
+- **API**: <kebab>.api.ts
+- **Utils**: kebab-case.ts o <kebab>.utils.ts
+- **Hooks**: useXxx.ts
+- **Components**: PascalCase.tsx
+- **Carpetas**: kebab-case o lowerCamel
+
+El reporte incluye:
+```
+"renameSuggestion": "app/utils/generate-pax-string.ts"
+```
+
+listas para refactors mecánicos (manuales o futuros auto-fix).
+
+### 6) Arquitectura de capas
+
+Detecta violaciones críticas como:
+
+- services o APIs importando app/pages (arquitectura invertida),
+- UI acoplada a HTTP,
+- responsabilidades cruzadas entre capas.
+
+Ejemplo:
+```
+ARCH-LAYER-004: Service/API importando app/pages
+```
+
+### 7) Consistencia HTTP
+
+Detecta cuando:
+
+- múltiples services hacen fetch directo,
+- hay varios “clientes HTTP implícitos”,
+- headers, parsing y errores divergen.
+
+Produce evidencia concreta con endpoints reales usados por cada service.
+
+### 8) Plan de refactor (refactorPlan)
+
+Genera pasos accionables, priorizados por impacto.
+
+Ejemplo real:
+
+```
+{
+  "title": "Crear un único apiClient y migrar services a usarlo",
+  "impact": "high",
+  "files": ["app/services/vouchers.service.ts", "..."],
+  "steps": [
+    "Crear apiClient",
+    "Migrar un service primero",
+    "Validar sin romper UI",
+    "Migrar el resto"
+  ]
+}
+```
+
+### 9) Sugerencias de tests
+
+Derivadas directamente de los issues:
+
+- Contract tests para apiClient (MSW).
+- Unit tests para services y hooks.
+- Integration tests cuando UI está acoplada.
+- Tests estáticos para evitar regresiones arquitectónicas.
+
+No sugiere tests genéricos: cada hint explica por qué y dónde.
+
+## Qué NO cubre todavía
+
+- Detección explícita de endpoints duplicados entre services.
+- Análisis profundo por AST (graph imports, complejidad real).
+- Auto-fix (renames + actualización de imports).
+- Soporte monorepo.
+- Modo CI (fail por severity).
+
+## Uso
 
 ### Requisitos
-- Node.js (recomendado 18+).
-- Linux/macOS/Windows (en Linux funciona directo).
+- Node.js 18+
+- Linux / macOS / Windows
 
-### Instalar dependencias
-```bash
+### Ejecutar análisis
+```
 npm install
+npm run analyze -- /ruta/al/repo
+```
 
-# Ejecutar análisis sobre un repo objetivo
-npm run analyze -- /ruta-local/al/repo
-
-# El reporte se genera en:
+Salida:
+```
 out/report.json
 ```
 
-#### Ejemplos útiles para inspección rápida:
-```bash
-jq '.issues | length' out/report.json
-jq '.issues | map({id, severity, evidence}) | .[0:25]' out/report.json
-jq '.inventory.largestFiles' out/report.json
+---
+
+## Usar el reporte como contexto para IA
+
+### Contexto corto (prompt-friendly)
+```
+jq '{
+  meta,
+  project,
+  appContext,
+  topIssues: (.issues | map(select(.severity=="high"))),
+  refactorPlan
+}' out/report.json > out/ai-context.short.json
 ```
 
+### Contexto completo
+```
+jq '{
+  meta,
+  project,
+  inventory,
+  appContext,
+  issues,
+  testHints,
+  refactorPlan
+}' out/report.json > out/ai-context.full.json
+```
 
-## Estructura del proyecto (analyzer)
+## Estos JSON se pueden pasar directamente como system/context prompt a otra IA.
 
-Carpetas principales:
+Estructura del analyzer
+```
+src/
+  discovery/     → detección de stack y configs
+  indexing/      → recorrido del repo
+  core/          → clasificación de archivos
+  rules/         → reglas independientes (issues)
+  report/        → síntesis (testHints, refactorPlan, appContext)
+  types/         → tipos del reporte
+  utils/         → helpers compartidos
+```
 
-- src/discovery/
-  - Detección del stack y configuración base del repo objetivo.
-- src/indexing/
-  - Recorrido del repo, ignore rules, inventario.
-- src/rules/
-  - Reglas aisladas que generan issues (cada regla = un archivo).
-- src/core/
-  - Clasificación de archivos (service/api/util/component/hook/context/etc.).
-- src/report/
-  - Construcción de secciones derivadas del reporte (ej: testHints, refactorPlan).
-- src/types/
-  - Tipos del reporte (Report, Issue, etc.).
-- src/utils/
-  - Helpers compartidos (fs/json, etc.).
+## Principios de diseño
 
+- Un archivo = una responsabilidad (SRP).
+- Reglas desacopladas.
+- Reporte estable y extensible.
+- Heurísticas primero, AST después.
+- Pensado para repos reales, no ejemplos ideales.
 
-## Principios de diseño internos
+### Resumen
 
-- Un archivo = una responsabilidad clara (SRP).
-- Reglas desacopladas: agregar una regla no requiere tocar otras.
-- Reporte con estructura estable: se pueden sumar campos sin romper consumers.
-- Código pensado para crecimiento incremental (primero heurísticas, luego AST).
+Repo Analyzer es una herramienta para:
 
+- entender sistemas heredados rápido,
+- prevenir que refactors empeoren la arquitectura,
+- estandarizar convenciones,
+- reducir deuda invisible,
+- y generar contexto técnico confiable para humanos y para IAs.
 
-## Ejemplos de uso práctico
-
-- Si aparece SERVICE-HTTP-001:
-  - Señal de que hay múltiples formas de hacer requests.
-  - Refactor recomendado: un apiClient único + services tipados.
-  - Beneficio: base ideal para contract tests (MSW), y luego unit tests de services.
-- Si aparecen muchos NAMING-MOD-001:
-  - Señal de naming inconsistente (probable deuda mecánica fácil de arreglar).
-  - Renames sugeridos: lista lista para ejecutar (manual o futuro auto-fix).
-
-## Licencia / contribución
-
-Propuesta de contribución:
-
-- cada nueva regla va en src/rules/<nombre>.ts
-- la regla retorna Issue[]
-- se conecta en src/analyze.ts en el array issues
-
-## Resumen
-
-Este proyecto es una base para “auditar” repositorios de forma automatizada y repetible. Su foco es generar un reporte accionable para estandarizar convenciones, prevenir divergencia en capas (especialmente HTTP/services), y habilitar un camino ordenado hacia refactors y tests.
+No reemplaza criterio técnico: lo amplifica.

@@ -13,6 +13,7 @@ import { ruleApiSurface } from "@/rules/apiSurface";
 import { ruleServiceHttpConsistency } from "@/rules/serviceHttpConsistency";
 import { ruleDuplicateEndpoints } from "@/rules/duplicateEndpoints";
 import { buildRefactorPlan } from "@/report/refactorPlan";
+import { buildAppContext } from "@/report/appContext";
 
 async function main() {
   const repoRoot = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
@@ -41,6 +42,7 @@ async function main() {
 
   const testHints = buildTestHints(issues);
   const refactorPlan = buildRefactorPlan(issues);
+  const appContext = buildAppContext(repoRoot, files);
 
   const report: Report = {
     meta: { generatedAt: new Date().toISOString(), repoRoot },
@@ -48,6 +50,7 @@ async function main() {
     inventory: { totalFiles: files.length, byExt, largestFiles },
     testHints,
     refactorPlan,
+    appContext,
     issues,
   };
 

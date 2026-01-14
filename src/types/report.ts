@@ -28,6 +28,36 @@ export type Issue = {
   evidence?: any;
 };
 
+export type AppContext = {
+  summary: {
+    whatItDoes: string[];
+    whatItDoesNotDo: string[];
+    keyDomains: string[];
+  };
+  stack: {
+    framework: string;
+    language: string[];
+    styling?: string[];
+    tooling?: string[];
+  };
+  structure: {
+    appRouter: boolean;
+    pagesRouter: boolean;
+    keyFolders: Array<{ path: string; purpose: string }>;
+  };
+  ui: {
+    pages: Array<{ routeHint: string; file: string }>;
+    keyComponents: string[];
+    contexts: string[];
+    hooks: string[];
+  };
+  dataAccess: {
+    services: string[];
+    endpoints: Array<{ endpoint: string; usedIn: string[] }>;
+    risks: string[];
+  };
+};
+
 export type Report = {
   meta: {
     generatedAt: string;
@@ -48,6 +78,7 @@ export type Report = {
     byExt: Record<string, number>;
     largestFiles: FileInfo[];
   };
+  appContext?: AppContext;
   refactorPlan?: RefactorStep[];
   testHints?: TestHint[];
   issues: Issue[];

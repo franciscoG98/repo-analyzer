@@ -114,6 +114,10 @@ export function ruleNamingConventions(files: string[]): Issue[] {
     for (const dir of parts.slice(0, -1)) {
       if (dir === "" || dir.startsWith(".") || dir === "src") continue;
 
+      if (dir === "_" && norm.startsWith(".husky/")) continue; // husky internal
+      if (/^\[.+\]$/.test(dir)) continue; // Next dynamic segments: [id], [sku], etc.
+      if (dir === "(no-ext)") continue;
+
       if (!hasKebabCase(dir) && !hasCamelOrLower(dir)) {
         issues.push({
           id: "NAMING-DIR-001",
